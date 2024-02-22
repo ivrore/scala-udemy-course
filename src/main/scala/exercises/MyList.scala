@@ -23,8 +23,15 @@ abstract class MyList[+A]{
   def map[B](transformer: A => B): MyList[B]
   def flatMap[B](transformer: A => MyList[B]): MyList[B]
   def filter(predicate: A => Boolean): MyList[A]
+
   // concatenation
   def ++[B>: A](list: MyList[B]): MyList[B]
+
+  // hofs
+  def foreach(f: A => Unit): Unit
+  def sort(compare: (A,A) => Int ): MyList[A]
+  def zipWith[B,C](list: MyList[B], zip:(A, B) => C): MyList[C]
+  def fold[B](start: B)(operator: (B,A) => B): B
 
 }
 // linked list
@@ -39,6 +46,13 @@ case object Empty extends MyList[Nothing]{
   def filter(predicate: Nothing => Boolean): MyList[Nothing] = Empty
 
   def ++[B >: Nothing](list: MyList[B]): MyList[B] = list
+  def foreach(f: Nothing => Unit): Unit = ()
+  def sort(compare: (Nothing,Nothing) => Int ) = Empty
+  def zipWith[B,C](list: MyList[B], zip:(Nothing, B) => C): MyList[C] =
+    if (!list.isEmpty) throw new RuntimeException("Lists do not have the same length")
+    else Empty
+  def fold [B](start: B)(operator: (B, Nothing) => B): B = start
+
 }
 
 case class Cons[+A](h: A, t: MyList[A]) extends MyList[A]{
@@ -93,7 +107,38 @@ case class Cons[+A](h: A, t: MyList[A]) extends MyList[A]{
 
   def flatMap[B](transformer: A => MyList[B]): MyList[B] =
     transformer(h) ++ t.flatMap(transformer)
+
+  //hofs
+  def foreach(f: A => Unit): Unit = {
+    f(h)
+    t.foreach(f)
+  }
+
+  def sort(compare: (A,A) => Int): MyList[A] = {
+    def insert(x: A, sortedList: MyList[A]): MyList[A] =
+      if (sortedList.isEmpty) new Cons (x, Empty)
+      else if (compare(x, sortedList.head) <= 0) new Cons(x, sortedList)
+      else new Cons(sortedList.head, insert(x, sortedList.tail))
+
+    val sortedTail = t.sort(compare)
+    insert(h, sortedTail)
+  }
+
+  def zipWith[B, C](list: MyList[B], zip: (A, B) => C): MyList[C] =
+    if (list.isEmpty) throw new RuntimeException("Lists do not have the same length")
+    else new Cons(zip(h,list.head),t.zipWith(list.tail,zip))
+
+    /*
+      [1,2,3].fold(0)(+) =
+      = [2,3].fold(1)(+) =
+      = [3].fold(2)(+) =
+      = [].fold(6)(+
+    */
+
+  def fold [B](start: B)(operator: (B, A) => B): B =
+    t.fold(operator(start, h))(operator)
 }
+
 
 trait MyPredicate[-T] {
   def test(element: T): Boolean
@@ -102,6 +147,7 @@ trait MyPredicate[-T] {
 trait MyTransformer[-A, B] {
   def transform(element: A): B
 }
+
 
 
 object ListTest extends App {
@@ -115,26 +161,31 @@ object ListTest extends App {
 
   val listOfIntegers: MyList[Int] = new Cons(1,new Cons(2, new Cons(3, Empty)))
   val cloneListOfIntegers: MyList[Int] = new Cons(1,new Cons(2, new Cons(3, Empty)))
-  val anotherListOfIntegers: MyList[Int] = new Cons(4,new Cons(5,Empty))
+  val anotherListOfIntegers: MyList[Int] = new Cons(4,new Cons(5, Empty))
   val listOfStrings: MyList[String] = new Cons("Hello",new Cons("Scala", Empty))
 
   println(listOfIntegers.toString)
   println(listOfStrings.toString)
+  println(anotherListOfIntegers.toString)
 
-  println(listOfIntegers.map(new Function1[Int,Int] {
-    override def apply(elem: Int): Int = elem * 2
-  }).toString)
 
-  println(listOfIntegers.filter(new Function1[Int, Boolean]{
-    override def apply(elem: Int): Boolean = elem % 2 == 0
-  }).toString)
+  println(listOfIntegers.map(elem => elem * 2).toString) // .map( _ * 2)
+
+  println(listOfIntegers.filter(elem => elem % 2 == 2).toString) // .filter( _ % 2 == 2)
 
   println((listOfIntegers ++ anotherListOfIntegers).toString)
-  println(listOfIntegers.flatMap(new Function1[Int, MyList[Int]] {
+  println(listOfIntegers.flatMap(elem => new Cons(elem,new Cons(elem + 1, Empty))).toString)
+
+    /*.flatMap(new Function1[Int, MyList[Int]] {
     override def apply(elem: Int): MyList[Int] = new Cons(elem, new Cons(elem + 1, Empty ))
-  }).toString)
+  }).toString)*/
+
   println(cloneListOfIntegers == listOfIntegers)
 
+  listOfIntegers.foreach(println)
+  println(listOfIntegers.sort((x, y) => y - x))
+  println(anotherListOfIntegers.zipWith[String, String](listOfStrings, _ + "-" + _))
+  println(listOfIntegers.fold(0)(_ + _))
 
 }
 
